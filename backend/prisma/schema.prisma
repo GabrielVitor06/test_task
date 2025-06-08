@@ -7,6 +7,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model User {
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
+  password String
+
+  planos   PlanoAula[]
+}
+
 model PlanoAula {
   id           Int      @id @default(autoincrement())
   originalName String
@@ -15,4 +24,9 @@ model PlanoAula {
   atividades   String
   avaliacao    String
   createdAt    DateTime @default(now())
+
+ userId       Int
+  user         User     @relation(fields: [userId], references: [id])
 }
+
+
