@@ -22,6 +22,15 @@ export default function PlanoPreviewModal({
   const [docxHtml, setDocxHtml] = useState("");
   const [form] = Form.useForm();
 
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    if (storedUserId) {
+      setUserId(storedUserId);
+    }
+  }, []);
+
   const loadDocx = useCallback(async (filePath: string) => {
     try {
       const response = await fetch(`http://localhost:4000/uploads/${filePath}`);
@@ -55,8 +64,12 @@ export default function PlanoPreviewModal({
     avaliacao: string;
   }) => {
     if (!plano) return;
+
     try {
-      await axios.put(`http://localhost:4000/planos/${plano.id}`, values);
+      await axios.put(`http://localhost:4000/planos/${plano.id}`, {
+        ...values,
+        userId, // agora pega o userId do estado que veio do localStorage
+      });
       message.success("Plano atualizado com sucesso!");
       onUpdated();
       onClose();

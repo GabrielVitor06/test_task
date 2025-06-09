@@ -14,8 +14,17 @@ export default function UploadPlano({ onUploadSuccess }: UploadPlanoProps) {
 
   const handleUpload = async (file: File) => {
     setUploading(true);
+
+    const userId = localStorage.getItem("userId");
+    if (!userId) {
+      message.error("Usuário não autenticado.");
+      setUploading(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("userId", userId);
 
     try {
       await axios.post("http://localhost:4000/upload", formData, {

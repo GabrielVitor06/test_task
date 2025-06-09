@@ -9,10 +9,12 @@ export default function LoginPage() {
 
   const onFinish = async (values: unknown) => {
     try {
-      const res = await axios.post<{ name: string }>(
+      const res = await axios.post<{ name: string; userId: number }>(
         "http://localhost:4000/login",
         values
       );
+      localStorage.setItem("userId", String(res.data.userId));
+
       message.success(`Bem-vindo, ${res.data.name}!`);
       router.push("/");
     } catch {

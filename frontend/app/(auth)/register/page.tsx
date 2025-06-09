@@ -10,7 +10,7 @@ export default function RegisterPage() {
     try {
       await axios.post("http://localhost:4000/register", values);
       message.success("Cadastro realizado com sucesso!");
-      router.push("/");
+      router.push("/login");
     } catch {
       message.error("Erro ao cadastrar");
     }

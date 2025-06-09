@@ -28,6 +28,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file)
     return res.status(400).json({ error: "Arquivo é obrigatório" });
 
+  const userId = Number(req.body.userId);
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
+
   const oldPath = path.join(req.file.destination, req.file.filename);
   const extension = path.extname(req.file.originalname);
   const newFilename = req.file.filename + extension;
@@ -35,47 +38,74 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
   fs.renameSync(oldPath, newPath);
 
-  const plano = await prisma.planoAula.create({
-    data: {
-      originalName: req.file.originalname,
-      filePath: newFilename,
-      objetivos: "",
-      atividades: "",
-      avaliacao: "",
-      user: {
-        connect: { id: 1 }, // Replace 1 with the actual user ID
+  try {
+    const plano = await prisma.planoAula.create({
+      data: {
+        originalName: req.file.originalname,
+        filePath: newFilename,
+        objetivos: "",
+        atividades: "",
+        avaliacao: "",
+        user: {
+          connect: { id: userId },
+        },
       },
-    },
-  });
+    });
 
-  res.json(plano);
+    res.json(plano);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao salvar plano" });
+  }
 });
 
 // Listar todos os planos
 app.get("/planos", async (req, res) => {
-  const planos = await prisma.planoAula.findMany();
-  res.json(planos);
+  const userId = Number(req.query.userId);
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
+
+  try {
+    const planos = await prisma.planoAula.findMany({
+      where: { userId },
+    });
+    res.json(planos);
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao buscar planos" });
+  }
 });
 
 // Obter um plano específico
 app.get("/planos/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = Number(req.query.userId);
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
+
   const plano = await prisma.planoAula.findUnique({ where: { id } });
-  if (!plano) return res.status(404).json({ error: "Plano não encontrado" });
+
+  if (!plano || plano.userId !== userId) {
+    return res.status(404).json({ error: "Plano não encontrado" });
+  }
   res.json(plano);
 });
 
 // Atualizar plano
 app.put("/planos/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = Number(req.body.userId);
   const { objetivos, atividades, avaliacao } = req.body;
 
-  const plano = await prisma.planoAula.update({
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
+
+  const plano = await prisma.planoAula.findUnique({ where: { id } });
+  if (!plano || plano.userId !== userId)
+    return res.status(404).json({ error: "Plano não encontrado" });
+
+  const atualizado = await prisma.planoAula.update({
     where: { id },
     data: { objetivos, atividades, avaliacao },
   });
 
-  res.json(plano);
+  res.json(atualizado);
 });
 
 // Gerar PDF
@@ -100,59 +130,52 @@ app.get("/planos/:id/pdf", async (req, res) => {
 // Deletar plano
 app.delete("/planos/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = Number(req.query.userId);
 
-  try {
-    const plano = await prisma.planoAula.findUnique({ where: { id } });
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
 
-    if (!plano) {
-      return res.status(404).json({ error: "Plano não encontrado" });
-    }
+  const plano = await prisma.planoAula.findUnique({ where: { id } });
+  if (!plano || plano.userId !== userId)
+    return res.status(404).json({ error: "Plano não encontrado" });
 
-    await prisma.planoAula.delete({ where: { id } });
+  await prisma.planoAula.delete({ where: { id } });
 
-    const filePath = path.join(__dirname, "..", "uploads", plano.filePath);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    res.json({ message: "Plano deletado com sucesso" });
-  } catch (error) {
-    console.error("Erro ao deletar plano:", error);
-    res.status(500).json({ error: "Erro ao deletar plano" });
+  const filePath = path.join(__dirname, "..", "uploads", plano.filePath);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
   }
+
+  res.json({ message: "Plano deletado com sucesso" });
 });
 
 // Duplicar plano
 app.post("/planos/:id/duplicar", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = Number(req.body.userId);
 
-  try {
-    const planoOriginal = await prisma.planoAula.findUnique({ where: { id } });
+  if (!userId) return res.status(400).json({ error: "UserId é obrigatório" });
 
-    if (!planoOriginal) {
-      return res.status(404).json({ error: "Plano não encontrado" });
-    }
+  const planoOriginal = await prisma.planoAula.findUnique({ where: { id } });
 
-    const planoDuplicado = await prisma.planoAula.create({
-      data: {
-        originalName: planoOriginal.originalName + " (cópia)",
-        filePath: planoOriginal.filePath,
-        objetivos: planoOriginal.objetivos,
-        atividades: planoOriginal.atividades,
-        avaliacao: planoOriginal.avaliacao,
-        user: {
-          connect: { id: 1 }, // Replace 1 with the actual user ID
-        },
-      },
-    });
-
-    res.status(201).json(planoDuplicado);
-  } catch (error) {
-    console.error("Erro ao duplicar plano:", error);
-    res.status(500).json({ error: "Erro interno ao duplicar o plano." });
+  if (!planoOriginal || planoOriginal.userId !== userId) {
+    return res.status(404).json({ error: "Plano não encontrado" });
   }
+
+  const planoDuplicado = await prisma.planoAula.create({
+    data: {
+      originalName: planoOriginal.originalName + " (cópia)",
+      filePath: planoOriginal.filePath,
+      objetivos: planoOriginal.objetivos,
+      atividades: planoOriginal.atividades,
+      avaliacao: planoOriginal.avaliacao,
+      user: { connect: { id: userId } },
+    },
+  });
+
+  res.status(201).json(planoDuplicado);
 });
 
+// gerar pdf padronizado
 app.post("/convert-pdf", upload.single("file"), async (req, res) => {
   const filePath = req.file?.path;
   if (!filePath) return res.status(400).json({ error: "Arquivo ausente" });
@@ -253,6 +276,7 @@ app.post("/convert-pdf", upload.single("file"), async (req, res) => {
   }
 });
 
+// register
 app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   try {
@@ -266,6 +290,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// login
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   const user = await prisma.user.findUnique({ where: { email } });
